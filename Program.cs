@@ -66,12 +66,12 @@ app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Seed Database
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    await DbInitializer.SeedAsync(services);
-}
+// Seed Database  for only one time
+//using (var scope = app.Services.CreateScope())
+//{
+//    var services = scope.ServiceProvider;
+//    await DbInitializer.SeedAsync(services);
+//}
 
 app.MapControllerRoute(
     name: "default",

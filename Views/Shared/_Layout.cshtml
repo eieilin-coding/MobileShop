@@ -27,7 +27,7 @@
                         <li class="nav-item">
                             <a class="nav-link">Products</a>
                         </li>
-                        <li class="nav-item dropdown">
+                        @* <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Brands</a>
                             <ul class="dropdown-menu">
                                 <li><a class="dropdown-item">Apple</a></li>
@@ -38,7 +38,8 @@
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item">View All</a></li>
                             </ul>
-                        </li>
+                        </li> *@
+                        @await Component.InvokeAsync("BrandsMenu")
                         <li class="nav-item">
                             <a class="nav-link">Contact</a>
                         </li>
