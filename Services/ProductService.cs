@@ -86,7 +86,7 @@ namespace MobileShop.Services
 
             if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
                 query = query.Where(p => p.Name.Contains(filter.SearchTerm) ||
-                                         p.Description.Contains(filter.SearchTerm) ||
+                                         (p.Description != null && p.Description.Contains(filter.SearchTerm)) ||
                                          p.Brand.Name.Contains(filter.SearchTerm));
 
             if (filter.MinPrice.HasValue)

@@ -37,29 +37,15 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
-    options.IdleTimeout = TimeSpan.FromMinutes(30);
-    options.Cookie.HttpOnly = true;
-    options.Cookie.IsEssential = true;
+    options.IdleTimeout = TimeSpan.FromMinutes(30); // Cart expires after 30 mins of inactivity
+    options.Cookie.HttpOnly = true;                 // Prevents client-side scripts from reading the session cookie
+    options.Cookie.IsEssential = true;              // Lets the cart work without cookie consent
 });
 
 // Register Custom Services for Dependency Injection
 builder.Services.AddScoped<IProductService, ProductService>();
-
-// 1. Add HttpContextAccessor to access Session inside the Service layer to buy for guest user without login
 builder.Services.AddHttpContextAccessor();
-
-// 2. Enable Session State Services
-builder.Services.AddDistributedMemoryCache();
-builder.Services.AddSession(options =>
-{
-    options.IdleTimeout = TimeSpan.FromMinutes(30); // Cart expires after 30 mins of inactivity
-    options.HttpOnly = true;                        // Security: Prevents XSS attacks from reading session cookie
-    options.IsEssential = true;                     // Essential for cart functionality to bypass GDPR cookie consent
-});
-
-// 3. Register Custom Application Services
-//builder.Services.AddScoped<IShoppingCartService, MobileShop.Services.ShoppingCartService>();
-builder.Services.AddScoped<IShoppingCartService,ShoppingCartService>();
+builder.Services.AddScoped<IShoppingCartService, ShoppingCartService>();
 
 
 // AutoMapper
@@ -96,10 +82,5 @@ app.UseAuthorization();
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
-
-// --- Down further in the file, right before app.Run() ---
-
-// 4. Activate the Session Middleware (Must be called before Authorization)
-app.UseSession();
 
 app.Run();
