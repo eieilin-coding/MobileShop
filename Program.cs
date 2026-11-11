@@ -43,7 +43,24 @@ builder.Services.AddSession(options =>
 });
 
 // Register Custom Services for Dependency Injection
-builder.Services.AddScoped<IProductService, MobileShop.Services.ProductService>();
+builder.Services.AddScoped<IProductService, ProductService>();
+
+// 1. Add HttpContextAccessor to access Session inside the Service layer to buy for guest user without login
+builder.Services.AddHttpContextAccessor();
+
+// 2. Enable Session State Services
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(30); // Cart expires after 30 mins of inactivity
+    options.HttpOnly = true;                        // Security: Prevents XSS attacks from reading session cookie
+    options.IsEssential = true;                     // Essential for cart functionality to bypass GDPR cookie consent
+});
+
+// 3. Register Custom Application Services
+//builder.Services.AddScoped<IShoppingCartService, MobileShop.Services.ShoppingCartService>();
+builder.Services.AddScoped<IShoppingCartService,ShoppingCartService>();
+
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Program));
@@ -59,6 +76,9 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
+
+// must place app.UseSession() after routing (app.UseRouting()) but before authorization parameters (app.UseAuthorization()). If it is misplaced,
+// the session data will not populate before your controller actions trigger!
 
 app.UseRouting();
 app.UseSession();
@@ -76,5 +96,10 @@ app.UseAuthorization();
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
+
+// --- Down further in the file, right before app.Run() ---
+
+// 4. Activate the Session Middleware (Must be called before Authorization)
+app.UseSession();
 
 app.Run();
