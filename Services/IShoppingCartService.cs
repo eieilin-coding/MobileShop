@@ -61,11 +61,12 @@ namespace MobileShop.Services
 
         public async Task<int> GetCartItemCountAsync()
         {
-            var cartId = GetCartId();
+            var cartId = _httpContextAccessor.HttpContext?.Session.GetString("CartId");
+            if (string.IsNullOrEmpty(cartId)) return 0;
+
             return await _context.ShoppingCartItems
                         .Where(c => c.CartId == cartId)
                         .SumAsync(c => c.Quantity);
-
         }
 
         public async Task<ShoppingCartViewModel> GetCartAsync()
