@@ -5,7 +5,7 @@ using MobileShop.ViewModels;
 
 namespace MobileShop.Services
 {
-        public interface IProductService
+    public interface IProductService
     {
         // Asynchronously gets a filtered, sorted, and paginated list of products
         Task<ProductListViewModel> GetProductsAsync(ProductListViewModel filter);
@@ -20,6 +20,7 @@ namespace MobileShop.Services
         // Fetches a list of similar products based on Category or Brand
         // Default count is set to 4 for a standard UI row
         Task<List<Product>> GetRelatedProductsAsync(int productId, int count = 4);
+        Task<bool> AddReviewAsync(int productId, string userId, ReviewViewModel review);
     }
 
     public class ProductService : IProductService
@@ -152,6 +153,26 @@ namespace MobileShop.Services
                 .OrderBy(x => Guid.NewGuid())        // Optional: Randomize the results
                 .Take(count)                          // Limit the result set
                 .ToListAsync();
+        }
+
+        public async Task<bool> AddReviewAsync(int productId, string userId, ReviewViewModel review)
+        {
+            var product = await _context.Products.FindAsync(productId);
+            if (product == null) return false;
+
+            var newReview = new Review
+            {
+                ProductId = productId,
+                UserId = userId,
+                Rating = review.Rating,
+                Title = review.Title,
+                Comment = review.Comment,
+                IsApproved = true // Auto-approve for now
+            };
+
+            _context.Reviews.Add(newReview);
+            await _context.SaveChangesAsync();
+            return true;
         }
 
     }
