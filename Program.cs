@@ -46,7 +46,7 @@ builder.Services.AddSession(options =>
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IShoppingCartService, ShoppingCartService>();
-
+builder.Services.AddScoped<IFileService, FileService>();
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Program));
