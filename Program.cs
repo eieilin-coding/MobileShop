@@ -42,11 +42,16 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;              // Lets the cart work without cookie consent
 });
 
+//Email Service Configuration
+builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
+
 // Register Custom Services for Dependency Injection
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IShoppingCartService, ShoppingCartService>();
 builder.Services.AddScoped<IFileService, FileService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IOrderService, OrderService>();
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Program));
