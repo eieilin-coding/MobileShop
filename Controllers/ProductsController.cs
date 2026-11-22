@@ -11,12 +11,14 @@ namespace MobileShop.Controllers
     public class ProductsController : Controller
     {
         private readonly IProductService _productService;
+        private readonly IShoppingCartService _cartService;
         private readonly UserManager<ApplicationUser> _userManager;
 
         // Injecting the Product Service through the constructor
-        public ProductsController(IProductService productService, UserManager<ApplicationUser> userManager)
+        public ProductsController(IProductService productService, IShoppingCartService cartService, UserManager<ApplicationUser> userManager)
         {
             _productService = productService;
+            _cartService = cartService;
             _userManager = userManager;
         }
 
@@ -140,5 +142,47 @@ namespace MobileShop.Controllers
             return RedirectToAction(nameof(Details), new { id = productId });
         }
 
+        public async Task<IActionResult> Compare(int[] ids)
+        {
+            if (ids == null || ids.Length < 2)
+            {
+                TempData["Error"] = "Please select at least 2 products to compare.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var products = new List<Product>();
+
+            foreach (var id in ids.Distinct().Take(4))
+            {
+                var product = await _productService.GetProductByIdAsync(id);
+
+                if (product != null)
+                {
+                    products.Add(product);
+                }
+            }
+
+            if (products.Count < 2)
+            {
+                TempData["Error"] = "Compare requires minimum 2 valid products.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var specificationNames = products
+                .SelectMany(p => p.Specifications)
+                .Select(s => s.Name)
+                .Distinct()
+                .ToList();
+
+            var viewModel = new CompareProductsViewModel
+            {
+                Products = products,
+                SpecificationNames = specificationNames
+            };
+
+            ViewBag.CartItemCount = await _cartService.GetCartItemCountAsync();
+
+            return View(viewModel);
+        }
     }
 }

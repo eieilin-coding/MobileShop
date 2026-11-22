@@ -14,4 +14,9 @@ namespace MobileShop.ViewModels
         // Used to toggle the heart icon if the user has already saved this item
         public bool IsInWishlist { get; set; }
     }
+    public class CompareProductsViewModel
+    {
+        public List<Product> Products { get; set; } = new();
+        public List<string> SpecificationNames { get; set; } = new();
+    }
 }
