@@ -292,6 +292,71 @@ public class CheckoutController : Controller
     }
 
     private static string PaymentSessionKey(int orderId) => $"TwoC2P:{orderId}";
+
+
+
+    //[HttpPost]
+    //[ValidateAntiForgeryToken]
+    //public async Task<IActionResult> Process(CheckoutViewModel model)
+    //{
+    //    var cart = await _cartService.GetCartAsync();
+    //    if (cart.CartItems.Count == 0)
+    //    {
+    //        TempData["Error"] = "Your cart is empty.";
+    //        return RedirectToAction("Index", "ShoppingCart");
+    //    }
+
+    //    model.Cart = cart;
+
+    //    if (!ModelState.IsValid)
+    //    {
+    //        ViewBag.CartItemCount = cart.ItemCount;
+    //        ViewBag.StripePublishableKey = _configuration["Stripe:PublishableKey"];
+    //        return View("Index", model);
+    //    }
+
+    //    try
+    //    {
+    //        var user = await _userManager.GetUserAsync(User);
+    //        var userId = user?.Id;
+
+    //        // Create order
+    //        var order = await _orderService.CreateOrderAsync(model, userId);
+
+    //        // Process payment based on method
+    //        if (model.PaymentMethod == MobileShop.Models.PaymentMethod.Stripe)
+    //        {
+    //            return await ProcessStripePayment(order, model);
+    //        }
+    //        else if (model.PaymentMethod == MobileShop.Models.PaymentMethod.CashOnDelivery)
+    //        {
+    //            order.PaymentStatus = PaymentStatus.Pending;
+    //            await _orderService.UpdateOrderStatusAsync(order.Id, OrderStatus.Pending);
+    //        }
+    //        else
+    //        {
+    //            // For other payment methods, mark as paid for demo
+    //            await _orderService.ProcessPaymentAsync(order.Id, $"DEMO-{Guid.NewGuid()}");
+    //        }
+
+    //        // Clear cart
+    //        await _cartService.ClearCartAsync();
+
+    //        // Send confirmation email
+    //        await _emailService.SendOrderConfirmationAsync(model.Email, order.OrderNumber, order.TotalAmount);
+
+    //        return RedirectToAction("Confirmation", new { orderNumber = order.OrderNumber });
+    //    }
+    //    catch (Exception ex)
+    //    {
+    //        _logger.LogError($"Checkout error: {ex.Message}");
+    //        ModelState.AddModelError("", "An error occurred during checkout. Please try again.");
+    //        ViewBag.CartItemCount = cart.ItemCount;
+    //        return View("Index", model);
+    //    }
+    //}
 }
 
 public record TwoCTwoPNotification(string Payload);
+
+

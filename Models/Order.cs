@@ -28,7 +28,8 @@ namespace MobileShop.Models
         PayPal,
         Stripe,
         CashOnDelivery,
-        UPI
+        UPI,
+        TwoC2P
     }
 
     public class Order

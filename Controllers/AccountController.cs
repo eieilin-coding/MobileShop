@@ -6,7 +6,6 @@ using MobileShop.Data;
 using MobileShop.Models;
 using MobileShop.Services;
 using MobileShop.ViewModels;
-using Stripe;
 
 namespace MobileShop.Controllers
 {

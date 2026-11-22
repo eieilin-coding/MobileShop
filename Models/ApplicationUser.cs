@@ -1,6 +1,5 @@
 ﻿using DocumentFormat.OpenXml.Drawing.Charts;
 using Microsoft.AspNetCore.Identity;
-using Stripe;
 using System.ComponentModel.DataAnnotations;
 
 namespace MobileShop.Models
