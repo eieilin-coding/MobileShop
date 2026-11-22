@@ -1,9 +1,10 @@
-﻿using Microsoft.AspNetCore.Identity;
+using System.Text.Json;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
 using MobileShop.Models;
 using MobileShop.Services;
 using MobileShop.ViewModels;
-using Stripe;
 
 public class CheckoutController : Controller
 {
@@ -12,6 +13,7 @@ public class CheckoutController : Controller
     private readonly IConfiguration _configuration;
     private readonly IOrderService _orderService;
     private readonly IEmailService _emailService;
+    private readonly Func<TwoCTwoPService> _paymentService;
     private readonly ILogger<CheckoutController> _logger;
 
     public CheckoutController(
@@ -20,6 +22,7 @@ public class CheckoutController : Controller
         IConfiguration configuration,
         IOrderService orderService,
         IEmailService emailService,
+        Func<TwoCTwoPService> paymentService,
         ILogger<CheckoutController> logger)
     {
         _cartService = cartService;
@@ -27,6 +30,7 @@ public class CheckoutController : Controller
         _configuration = configuration;
         _orderService = orderService;
         _emailService = emailService;
+        _paymentService = paymentService;
         _logger = logger;
     }
 
@@ -51,49 +55,10 @@ public class CheckoutController : Controller
             Address = user?.Address ?? "",
             City = user?.City ?? "",
             PostalCode = user?.PostalCode ?? "",
-            Country = user?.Country ?? "Pakistan"
+            Country = user?.Country ?? "Myanmar"
         };
 
-        ViewBag.StripePublishableKey = _configuration["Stripe:PublishableKey"];
-        ViewBag.CartItemCount = cart.ItemCount;
         return View(model);
-    }
-
-    private async Task<IActionResult> ProcessStripePayment(Order order, CheckoutViewModel model)
-    {
-        try
-        {
-            var options = new ChargeCreateOptions
-            {
-                Amount = (long)(order.TotalAmount * 100),
-                Currency = "PKR",
-                Description = $"Order {order.OrderNumber}",
-                Source = model.StripeToken
-            };
-
-            var service = new ChargeService();
-            var charge = await service.CreateAsync(options);
-
-            if (charge.Status == "succeeded")
-            {
-                await _orderService.ProcessPaymentAsync(order.Id, charge.Id);
-                await _cartService.ClearCartAsync();
-                await _emailService.SendOrderConfirmationAsync(model.Email, order.OrderNumber, order.TotalAmount);
-
-                return RedirectToAction("Confirmation", new { orderNumber = order.OrderNumber });
-            }
-            else
-            {
-                TempData["Error"] = "Payment failed. Please try again.";
-                return RedirectToAction("Index");
-            }
-        }
-        catch (StripeException ex)
-        {
-            _logger.LogError($"Stripe error: {ex.Message}");
-            TempData["Error"] = $"Payment error: {ex.Message}";
-            return RedirectToAction("Index");
-        }
     }
 
     [HttpPost]
@@ -108,53 +73,163 @@ public class CheckoutController : Controller
         }
 
         model.Cart = cart;
-
+        model.IsAuthenticated = User.Identity?.IsAuthenticated == true;
+        if (cart.CartItems.Any(item => item.Quantity <= 0 || item.UnitPrice < 0 || item.Quantity > item.StockQuantity) || cart.GrandTotal <= 0)
+        {
+            ModelState.AddModelError("", "Your cart contains invalid quantities or unavailable products. Please update it before checkout.");
+        }
+        if (model.PaymentMethod != PaymentMethod.TwoC2P && model.PaymentMethod != PaymentMethod.CashOnDelivery)
+        {
+            ModelState.AddModelError(nameof(model.PaymentMethod), "Please select an available payment method.");
+        }
         if (!ModelState.IsValid)
         {
-            ViewBag.CartItemCount = cart.ItemCount;
-            ViewBag.StripePublishableKey = _configuration["Stripe:PublishableKey"];
             return View("Index", model);
         }
 
         try
         {
+            Uri? returnBase = null;
+            TwoCTwoPService? paymentService = null;
+            if (model.PaymentMethod == PaymentMethod.TwoC2P)
+            {
+                if (!string.Equals(_configuration["TwoC2P:CurrencyCode"], "MMK", StringComparison.Ordinal) ||
+                    !Uri.TryCreate(_configuration["TwoC2P:ReturnBaseUrl"], UriKind.Absolute, out returnBase) ||
+                    returnBase.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(returnBase.UserInfo) ||
+                    !string.IsNullOrEmpty(returnBase.Query) || !string.IsNullOrEmpty(returnBase.Fragment))
+                {
+                    throw new InvalidOperationException("2C2P requires MMK and a configured HTTPS return base URL.");
+                }
+
+                paymentService = _paymentService();
+            }
+
             var user = await _userManager.GetUserAsync(User);
-            var userId = user?.Id;
+            var order = await _orderService.CreateOrderAsync(model, user?.Id);
 
-            // Create order
-            var order = await _orderService.CreateOrderAsync(model, userId);
-
-            // Process payment based on method
-            if (model.PaymentMethod == MobileShop.Models.PaymentMethod.Stripe)
+            if (model.PaymentMethod == PaymentMethod.CashOnDelivery)
             {
-                return await ProcessStripePayment(order, model);
-            }
-            else if (model.PaymentMethod == MobileShop.Models.PaymentMethod.CashOnDelivery)
-            {
-                order.PaymentStatus = PaymentStatus.Pending;
-                await _orderService.UpdateOrderStatusAsync(order.Id, OrderStatus.Pending);
-            }
-            else
-            {
-                // For other payment methods, mark as paid for demo
-                await _orderService.ProcessPaymentAsync(order.Id, $"DEMO-{Guid.NewGuid()}");
+                await _cartService.ClearCartAsync();
+                await _emailService.SendOrderConfirmationAsync(model.Email, order.OrderNumber, order.TotalAmount);
+                return RedirectToAction(nameof(Confirmation), new { orderNumber = order.OrderNumber });
             }
 
-            // Clear cart
-            await _cartService.ClearCartAsync();
+            var sessionKey = PaymentSessionKey(order.Id);
+            HttpContext.Session.SetString(sessionKey, model.Email);
+            HttpContext.Session.SetString(sessionKey + ":CartId", HttpContext.Session.GetString("CartId") ?? "");
+            var returnPath = Url.Action(nameof(PaymentReturn), "Checkout", new { orderNumber = order.OrderNumber })!;
+            var frontendReturnUrl = new Uri(returnBase!, returnPath).AbsoluteUri;
+            var backendReturnUrl = _configuration["TwoC2P:BackendReturnUrl"];
+            var result = await paymentService!.CreatePaymentTokenAsync(
+                order.OrderNumber, order.TotalAmount, frontendReturnUrl,
+                string.IsNullOrWhiteSpace(backendReturnUrl) ? null : backendReturnUrl);
 
-            // Send confirmation email
-            await _emailService.SendOrderConfirmationAsync(model.Email, order.OrderNumber, order.TotalAmount);
+            if (result.RespCode != "0000" || string.IsNullOrWhiteSpace(result.WebPaymentUrl))
+            {
+                _logger.LogWarning("2C2P did not create a payment token for order {OrderId}: {ResponseCode}", order.Id, result.RespCode);
+                ModelState.AddModelError("", "Unable to start payment. Please try again.");
+                return View("Index", model);
+            }
 
-            return RedirectToAction("Confirmation", new { orderNumber = order.OrderNumber });
+            return Redirect(result.WebPaymentUrl);
         }
         catch (Exception ex)
         {
-            _logger.LogError($"Checkout error: {ex.Message}");
-            ModelState.AddModelError("", "An error occurred during checkout. Please try again.");
-            ViewBag.CartItemCount = cart.ItemCount;
+            _logger.LogError(ex, "Unable to start checkout");
+            ModelState.AddModelError("", "Unable to start checkout. Please try again or contact support.");
             return View("Index", model);
         }
+    }
+
+    [AcceptVerbs("GET", "POST")]
+    [IgnoreAntiforgeryToken]
+    public IActionResult PaymentReturn(string orderNumber)
+    {
+        return RedirectToAction(nameof(CheckPayment), new { orderNumber });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> CheckPayment(string orderNumber)
+    {
+        var order = await _orderService.GetOrderByNumberAsync(orderNumber);
+        if (order == null || order.PaymentMethod != PaymentMethod.TwoC2P)
+        {
+            return NotFound();
+        }
+
+        var sessionKey = PaymentSessionKey(order.Id);
+        var email = HttpContext.Session.GetString(sessionKey);
+        if (order.PaymentStatus == PaymentStatus.Pending)
+        {
+            try
+            {
+                var result = await _paymentService().InquireAsync(order.OrderNumber);
+                await ApplyPaymentResultAsync(result);
+                order = await _orderService.GetOrderByNumberAsync(orderNumber) ?? order;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not verify 2C2P payment for order {OrderId}", order.Id);
+            }
+        }
+
+        if (string.IsNullOrEmpty(email))
+        {
+            if (order.PaymentStatus == PaymentStatus.Paid)
+                TempData["Success"] = "Payment was confirmed, but your checkout session expired. Contact the shop with your order number.";
+            else
+                TempData["Error"] = "Your checkout session expired and payment is not confirmed. Contact the shop with your order number before paying again.";
+            return RedirectToAction("Index", "Home");
+        }
+
+        if (order.PaymentStatus == PaymentStatus.Paid && HttpContext.Session.GetString(sessionKey + ":Completed") != "1")
+        {
+            if (HttpContext.Session.GetString(sessionKey + ":CartId") == HttpContext.Session.GetString("CartId"))
+            {
+                var cart = await _cartService.GetCartAsync();
+                foreach (var orderItem in order.OrderItems)
+                {
+                    var cartItem = cart.CartItems.FirstOrDefault(item => item.ProductId == orderItem.ProductId);
+                    if (cartItem != null)
+                    {
+                        await _cartService.UpdateCartItemAsync(cartItem.CartItemId, cartItem.Quantity - orderItem.Quantity);
+                    }
+                }
+            }
+
+            HttpContext.Session.SetString(sessionKey + ":Completed", "1");
+            await _emailService.SendOrderConfirmationAsync(email, order.OrderNumber, order.TotalAmount);
+        }
+
+        return View("Confirmation", new OrderConfirmationViewModel
+        {
+            Order = order,
+            OrderItems = order.OrderItems.ToList()
+        });
+    }
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    [RequestSizeLimit(16384)]
+    public async Task<IActionResult> PaymentNotification([FromBody] TwoCTwoPNotification? notification)
+    {
+        if (string.IsNullOrWhiteSpace(notification?.Payload))
+        {
+            return BadRequest();
+        }
+
+        TwoCTwoPPaymentResult result;
+        try
+        {
+            result = _paymentService().VerifyBackendPayload(notification.Payload);
+        }
+        catch (Exception ex) when (ex is SecurityTokenException or InvalidDataException or ArgumentException or FormatException or JsonException)
+        {
+            _logger.LogWarning(ex, "Invalid 2C2P notification");
+            return BadRequest();
+        }
+
+        return await ApplyPaymentResultAsync(result) ? Ok() : BadRequest();
     }
 
     public async Task<IActionResult> Confirmation(string orderNumber)
@@ -165,15 +240,58 @@ public class CheckoutController : Controller
             return NotFound();
         }
 
-        var viewModel = new OrderConfirmationViewModel
+        if (order.PaymentMethod == PaymentMethod.TwoC2P)
+        {
+            return RedirectToAction(nameof(CheckPayment), new { orderNumber });
+        }
+
+        return View(new OrderConfirmationViewModel
         {
             Order = order,
             OrderItems = order.OrderItems.ToList()
-        };
-
-        ViewBag.CartItemCount = 0;
-        return View(viewModel);
+        });
     }
 
+    private async Task<bool> ApplyPaymentResultAsync(TwoCTwoPPaymentResult result)
+    {
+        if (result.InvoiceNo.Length != 12 || result.InvoiceNo.Any(character => !char.IsAsciiDigit(character)) ||
+            result.ReferenceNo.Length > 50)
+        {
+            return false;
+        }
 
+        var order = await _orderService.GetOrderByNumberAsync(result.InvoiceNo);
+        if (order == null || order.PaymentMethod != PaymentMethod.TwoC2P || order.TotalAmount != result.Amount ||
+            result.CurrencyCode != "MMK" || _configuration["TwoC2P:CurrencyCode"] != "MMK")
+        {
+            return false;
+        }
+
+        if (result.RespCode != "0000")
+        {
+            return true;
+        }
+
+        if (order.PaymentStatus == PaymentStatus.Paid)
+        {
+            return order.TransactionId == result.ReferenceNo;
+        }
+
+        if (order.PaymentStatus != PaymentStatus.Pending)
+        {
+            return false;
+        }
+
+        if (await _orderService.ProcessTwoC2PPaymentAsync(order.Id, result.ReferenceNo))
+        {
+            return true;
+        }
+
+        order = await _orderService.GetOrderByNumberAsync(result.InvoiceNo);
+        return order?.PaymentStatus == PaymentStatus.Paid && order.TransactionId == result.ReferenceNo;
+    }
+
+    private static string PaymentSessionKey(int orderId) => $"TwoC2P:{orderId}";
 }
+
+public record TwoCTwoPNotification(string Payload);

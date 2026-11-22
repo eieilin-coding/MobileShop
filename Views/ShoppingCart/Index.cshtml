@@ -31,7 +31,7 @@
                                 </div>
                                 <div class="col-md-4">
                                     <h6 class="mb-1">@item.ProductName</h6>
-                                    <p class="text-muted mb-0">RS @item.UnitPrice.ToString("N0") each</p>
+                                    <p class="text-muted mb-0">MMK @item.UnitPrice.ToString("N2") each</p>
                                 </div>
                                 <div class="col-md-3">
                                     <div class="input-group">
@@ -49,7 +49,7 @@
                                     </div>
                                 </div>
                                 <div class="col-md-2 text-end">
-                                    <h6 class="mb-0">RS @item.TotalPrice.ToString("N0")</h6>
+                                    <h6 class="mb-0">MMK @item.TotalPrice.ToString("N2")</h6>
                                 </div>
                                 <div class="col-md-1 text-end">
                                     <button type="button" class="btn btn-outline-danger btn-sm"
@@ -80,26 +80,26 @@
                     <div class="card-body">
                         <div class="d-flex justify-content-between mb-2">
                             <span>Subtotal (@Model.ItemCount items)</span>
-                            <span id="cartTotal">RS @Model.CartTotal.ToString("N0")</span>
+                            <span id="cartTotal">MMK @Model.CartTotal.ToString("N2")</span>
                         </div>
                         <div class="d-flex justify-content-between mb-2">
-                            <span>Tax (18% GST)</span>
-                            <span id="cartTax">RS @Model.Tax.ToString("N0")</span>
+                            <span>Tax (18%)</span>
+                            <span id="cartTax">MMK @Model.Tax.ToString("N2")</span>
                         </div>
                         <div class="d-flex justify-content-between mb-2">
                             <span>Shipping</span>
                             <span id="cartShipping">
-                                @(Model.Shipping == 0 ? "FREE" : $"RS {Model.Shipping:N0}")
+                                @(Model.Shipping == 0 ? "FREE" : $"MMK {Model.Shipping:N2}")
                             </span>
                         </div>
                         @if (Model.Shipping > 0)
                         {
-                            <small class="text-muted">Free shipping on orders above RS 50,000</small>
+                            <small class="text-muted">Free shipping on orders above MMK 50,000</small>
                         }
                         <hr />
                         <div class="d-flex justify-content-between mb-3">
                             <h5 class="mb-0">Total</h5>
-                            <h5 class="mb-0 text-primary" id="cartGrandTotal">RS @Model.GrandTotal.ToString("N0")</h5>
+                            <h5 class="mb-0 text-primary" id="cartGrandTotal">MMK @Model.GrandTotal.ToString("N2")</h5>
                         </div>
                         <a asp-controller="Checkout" asp-action="Index" class="btn btn-primary w-100 btn-lg">
                             Proceed to Checkout <i class="bi bi-arrow-right"></i>

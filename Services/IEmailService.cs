@@ -1,6 +1,9 @@
-﻿using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using MobileShop.Models;
 using System;
+using System.Net;
+using System.Net.Mail;
 using System.Threading.Tasks;
 
 namespace MobileShop.Services
@@ -14,12 +17,12 @@ namespace MobileShop.Services
 
     public class EmailService : IEmailService
     {
-        private readonly IConfiguration _configuration;
+        private readonly IOptions<EmailSettings> _emailSettings;
         private readonly ILogger<EmailService> _logger;
 
-        public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
+        public EmailService(IOptions<EmailSettings> emailSettings, ILogger<EmailService> logger)
         {
-            _configuration = configuration;
+            _emailSettings = emailSettings;
             _logger = logger;
         }
 
@@ -27,29 +30,37 @@ namespace MobileShop.Services
         {
             try
             {
-                var smtpServer = _configuration["EmailSettings:SmtpServer"];
-                var smtpPort = int.Parse(_configuration["EmailSettings:SmtpPort"] ?? "587");
-                var senderEmail = _configuration["EmailSettings:SenderEmail"];
-                var senderPassword = _configuration["EmailSettings:SenderPassword"];
+                var settings = _emailSettings.Value;
+                if (string.IsNullOrWhiteSpace(settings.Host) || settings.Port < 1 || settings.Port > 65535 ||
+                    string.IsNullOrWhiteSpace(settings.Username) || string.IsNullOrWhiteSpace(settings.Password) ||
+                    string.IsNullOrWhiteSpace(settings.FromEmail))
+                {
+                    _logger.LogError("Failed to send email: EmailSettings must include Host, a valid Port, Username, Password, and FromEmail.");
+                    return;
+                }
 
-                using var client = new System.Net.Mail.SmtpClient(smtpServer, smtpPort)
+                using var client = new SmtpClient(settings.Host, settings.Port)
                 {
                     EnableSsl = true,
                     UseDefaultCredentials = false,
-                    Credentials = new System.Net.NetworkCredential(senderEmail, senderPassword)
+                    Credentials = new NetworkCredential(settings.Username, settings.Password)
                 };
 
-                var message = new System.Net.Mail.MailMessage(senderEmail, to, subject, body)
-                {
-                    IsBodyHtml = isHtml
-                };
+                using var message = new MailMessage();
+                message.From = new MailAddress(settings.FromEmail, settings.FromName);
+                message.To.Add(to);
+                message.Subject = subject;
+                message.Body = body;
+                message.IsBodyHtml = isHtml;
 
                 await client.SendMailAsync(message);
-                _logger.LogInformation($"Email sent to {to}");
+                _logger.LogInformation("Email sent to {Recipient}", to);
             }
             catch (Exception ex)
             {
-                _logger.LogError($"Failed to send email: {ex.Message}");
+                _logger.LogError("Failed to send email. Error type: {ErrorType}; SMTP status: {SmtpStatus}; underlying error type: {InnerErrorType}.",
+                    ex.GetType().Name, (ex as SmtpException)?.StatusCode.ToString() ?? "not available",
+                    ex.InnerException?.GetType().Name ?? "none");
             }
         }
 
@@ -59,7 +70,7 @@ namespace MobileShop.Services
             var body = $@"
                 <h2>Thank you for your order!</h2>
                 <p>Your order <strong>{orderNumber}</strong> has been placed successfully.</p>
-                <p>Total Amount: <strong>${total:N2}</strong></p>
+                <p>Total Amount: <strong>MMK {total:N2}</strong></p>
                 <p>We will notify you once your order is shipped.</p>";
 
             await SendEmailAsync(to, subject, body);

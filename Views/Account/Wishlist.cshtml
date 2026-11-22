@@ -59,7 +59,7 @@
                                         <div class="card-body">
                                             <p class="text-muted mb-1 small">@item.Product?.Brand?.Name</p>
                                             <h6 class="card-title">@item.Product?.Name</h6>
-                                            <h5 class="text-primary">RS @item.Product?.SalePrice.ToString("N0")</h5>
+                                            <h5 class="text-primary">MMK @item.Product?.SalePrice.ToString("N2")</h5>
                                             <form asp-controller="ShoppingCart" asp-action="AddToCart" method="post">
                                                 <input type="hidden" name="productId" value="@item.ProductId" />
                                                 <button type="submit" class="btn btn-primary w-100" @(item.Product?.StockQuantity <= 0 ? "disabled" : "")>

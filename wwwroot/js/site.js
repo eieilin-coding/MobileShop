@@ -24,7 +24,7 @@ $(document).ready(function () {
                             <img src="${item.image || 'https://via.placeholder.com/40x40?text=No+Image'}" class="rounded me-3" style="width: 40px; height: 40px; object-fit: cover;" />
                             <div>
                                 <h6 class="mb-0">${item.name}</h6>
-                                <small class="text-muted">${item.brand} - RS ${item.price.toLocaleString()}</small>
+                                <small class="text-muted">${item.brand} - MMK ${item.price.toLocaleString()}</small>
                             </div>
                         </a>`;
                     });

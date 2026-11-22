@@ -1,4 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Globalization;
+using System.Security.Cryptography;
+using Microsoft.EntityFrameworkCore;
 using MobileShop.Data;
 using MobileShop.Models;
 using MobileShop.ViewModels;
@@ -10,7 +12,7 @@ namespace MobileShop.Services
         Task<Order> CreateOrderAsync(CheckoutViewModel model, string? userId);
         Task<Order?> GetOrderByNumberAsync(string orderNumber);
         Task<bool> UpdateOrderStatusAsync(int orderId, OrderStatus status);
-        Task<bool> ProcessPaymentAsync(int orderId, string transactionId);
+        Task<bool> ProcessTwoC2PPaymentAsync(int orderId, string transactionId);
     }
 
     public class OrderService : IOrderService
@@ -26,6 +28,10 @@ namespace MobileShop.Services
 
         public async Task<Order> CreateOrderAsync(CheckoutViewModel model, string? userId)
         {
+            await using var transaction = model.PaymentMethod == PaymentMethod.CashOnDelivery
+                ? await _context.Database.BeginTransactionAsync()
+                : null;
+
             var order = new Order
             {
                 UserId = userId,
@@ -42,6 +48,12 @@ namespace MobileShop.Services
                 Notes = model.OrderNotes
             };
 
+            if (model.PaymentMethod == PaymentMethod.TwoC2P)
+            {
+                order.OrderNumber = RandomNumberGenerator.GetInt32(100000, 1000000).ToString(CultureInfo.InvariantCulture) +
+                                    RandomNumberGenerator.GetInt32(0, 1000000).ToString("D6", CultureInfo.InvariantCulture);
+            }
+
             foreach (var item in model.Cart.CartItems)
             {
                 order.OrderItems.Add(new OrderItem
@@ -51,16 +63,25 @@ namespace MobileShop.Services
                     UnitPrice = item.UnitPrice
                 });
 
-                // Update stock
-                var product = await _context.Products.FindAsync(item.ProductId);
-                if (product != null)
+                if (model.PaymentMethod == PaymentMethod.CashOnDelivery)
                 {
-                    product.StockQuantity -= item.Quantity;
+                    var updated = await _context.Products
+                        .Where(product => product.Id == item.ProductId && product.StockQuantity >= item.Quantity)
+                        .ExecuteUpdateAsync(setters => setters.SetProperty(
+                            product => product.StockQuantity, product => product.StockQuantity - item.Quantity));
+                    if (updated == 0)
+                    {
+                        throw new InvalidOperationException("A product is no longer available in the requested quantity.");
+                    }
                 }
             }
 
             _context.Orders.Add(order);
             await _context.SaveChangesAsync();
+            if (transaction != null)
+            {
+                await transaction.CommitAsync();
+            }
 
             _logger.LogInformation($"Order {order.OrderNumber} created successfully");
             return order;
@@ -69,7 +90,7 @@ namespace MobileShop.Services
         public async Task<bool> UpdateOrderStatusAsync(int orderId, OrderStatus status)
         {
             var order = await _context.Orders.FindAsync(orderId);
-            if (order == null) return false;
+            if (order == null || (order.PaymentMethod == PaymentMethod.TwoC2P && status == OrderStatus.Refunded)) return false;
 
             order.Status = status;
 
@@ -99,7 +120,7 @@ namespace MobileShop.Services
             else if (status == OrderStatus.Cancelled)
             {
                 // FIX: If order was already paid and then cancelled, mark payment as Refunded
-                if (order.PaymentStatus == PaymentStatus.Paid)
+                if (order.PaymentStatus == PaymentStatus.Paid && order.PaymentMethod != PaymentMethod.TwoC2P)
                 {
                     order.PaymentStatus = PaymentStatus.Refunded;
                 }
@@ -110,22 +131,43 @@ namespace MobileShop.Services
             return true;
         }
 
-        public async Task<bool> ProcessPaymentAsync(int orderId, string transactionId)
+        public async Task<bool> ProcessTwoC2PPaymentAsync(int orderId, string transactionId)
         {
-            var order = await _context.Orders.FindAsync(orderId);
-            if (order == null) return false;
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            var updated = await _context.Orders
+                .Where(o => o.Id == orderId && o.PaymentMethod == PaymentMethod.TwoC2P &&
+                            o.PaymentStatus == PaymentStatus.Pending)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(o => o.PaymentStatus, PaymentStatus.Paid)
+                    .SetProperty(o => o.TransactionId, transactionId));
 
-            order.PaymentStatus = PaymentStatus.Paid;
-            order.TransactionId = transactionId;
+            if (updated == 0)
+            {
+                return false;
+            }
 
-            await _context.SaveChangesAsync();
-            _logger.LogInformation($"Payment processed for order {orderId}");
+            var items = await _context.OrderItems.AsNoTracking()
+                .Where(item => item.OrderId == orderId)
+                .ToListAsync();
+            foreach (var item in items)
+            {
+                await _context.Products.Where(product => product.Id == item.ProductId)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(
+                        product => product.StockQuantity, product => product.StockQuantity - item.Quantity));
+                if (await _context.Products.AnyAsync(product => product.Id == item.ProductId && product.StockQuantity < 0))
+                {
+                    _logger.LogWarning("Paid order {OrderId} requires stock reconciliation for product {ProductId}", orderId, item.ProductId);
+                }
+            }
+
+            await transaction.CommitAsync();
+            _logger.LogInformation("Payment processed for order {OrderId}", orderId);
             return true;
         }
 
         public async Task<Order?> GetOrderByNumberAsync(string orderNumber)
         {
-            return await _context.Orders
+            return await _context.Orders.AsNoTracking()
                 .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Product)
                 .Include(o => o.User)

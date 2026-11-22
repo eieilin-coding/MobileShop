@@ -40,6 +40,8 @@ namespace MobileShop.Services
         }
         public async Task AddToCartAsync(int productId, int quantity = 1)
         {
+            if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
+
             var cartId = GetCartId();
             var cartItem = await _context.ShoppingCartItems
                .FirstOrDefaultAsync(c => c.CartId == cartId && c.ProductId == productId);
@@ -92,7 +94,7 @@ namespace MobileShop.Services
                 }).ToList(),
                 CartTotal = cartItems.Sum(c => c.Product.SalePrice * c.Quantity),
                 ItemCount = cartItems.Sum(c => c.Quantity),
-                Tax = cartItems.Sum(c => c.Product.SalePrice * c.Quantity) * 0.18m,
+                Tax = Math.Round(cartItems.Sum(c => c.Product.SalePrice * c.Quantity) * 0.18m, 2, MidpointRounding.AwayFromZero),
                 Shipping = cartItems.Sum(c => c.Product.SalePrice * c.Quantity) > 50000 ? 0 : 500
             };
 

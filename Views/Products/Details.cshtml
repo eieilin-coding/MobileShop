@@ -79,10 +79,10 @@
                 <div class="mb-3">
                     @if (Model.Product.OriginalPrice > Model.Product.SalePrice)
                     {
-                        <del class="text-muted fs-4">RS @Model.Product.OriginalPrice.ToString("N0")</del>
+                        <del class="text-muted fs-4">MMK @Model.Product.OriginalPrice.ToString("N2")</del>
                         <span class="badge bg-danger ms-2">-@Model.Product.DiscountPercentage% OFF</span>
                     }
-                    <h3 class="text-primary">RS @Model.Product.SalePrice.ToString("N0")</h3>
+                    <h3 class="text-primary">MMK @Model.Product.SalePrice.ToString("N2")</h3>
                 </div>
 
                 <!-- Short Description -->

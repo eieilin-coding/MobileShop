@@ -55,7 +55,7 @@ namespace MobileShop.ViewModels
         [Required(ErrorMessage = "Country is required")]
         [Display(Name = "Country")]
         [StringLength(50)]
-        public string Country { get; set; } = "Pakistan";
+        public string Country { get; set; } = "Myanmar";
 
         [StringLength(500)]
         [Display(Name = "Order Notes")]
@@ -65,10 +65,7 @@ namespace MobileShop.ViewModels
         // Payment Information
         [Required(ErrorMessage = "Please select a payment method")]
         [Display(Name = "Payment Method")]
-        public PaymentMethod PaymentMethod { get; set; }
-
-        // For Stripe
-        public string? StripeToken { get; set; }
+        public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.TwoC2P;
 
         // Save address for future
         [Display(Name = "Save this address for future orders")]

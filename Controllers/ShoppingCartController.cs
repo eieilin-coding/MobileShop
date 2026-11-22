@@ -21,6 +21,8 @@ namespace MobileShop.Controllers
         [HttpPost]
         public async Task<IActionResult> AddToCart(int productId, int quantity = 1)
         {
+            if (quantity <= 0) return BadRequest();
+
             await _cartService.AddToCartAsync(productId, quantity);
             var itemCount = await _cartService.GetCartItemCountAsync();
 

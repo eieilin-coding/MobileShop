@@ -52,6 +52,8 @@ builder.Services.AddScoped<IShoppingCartService, ShoppingCartService>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddHttpClient<TwoCTwoPService>();
+builder.Services.AddScoped<Func<TwoCTwoPService>>(services => () => services.GetRequiredService<TwoCTwoPService>());
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Program));

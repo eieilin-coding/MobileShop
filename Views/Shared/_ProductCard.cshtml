@@ -63,9 +63,9 @@
                 <div>
                     @if (Model.OriginalPrice > Model.SalePrice)
                     {
-                        <del class="text-muted small">RS @Model.OriginalPrice.ToString("N0")</del>
+                        <del class="text-muted small">MMK @Model.OriginalPrice.ToString("N2")</del>
                     }
-                    <h5 class="text-primary mb-0">RS @Model.SalePrice.ToString("N0")</h5>
+                    <h5 class="text-primary mb-0">MMK @Model.SalePrice.ToString("N2")</h5>
                 </div>
 
                 @* <form asp-controller="Cart" asp-action="AddToCart" method="post" class="d-inline"> *@
