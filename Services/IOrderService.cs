@@ -13,6 +13,8 @@ namespace MobileShop.Services
         Task<Order?> GetOrderByNumberAsync(string orderNumber);
         Task<bool> UpdateOrderStatusAsync(int orderId, OrderStatus status);
         Task<bool> ProcessTwoC2PPaymentAsync(int orderId, string transactionId);
+        Task<List<Order>> GetUserOrdersAsync(string userId);
+        Task<Order?> GetOrderByIdAsync(int orderId);
     }
 
     public class OrderService : IOrderService
@@ -172,6 +174,25 @@ namespace MobileShop.Services
                 .ThenInclude(oi => oi.Product)
                 .Include(o => o.User)
                 .FirstOrDefaultAsync(o => o.OrderNumber == orderNumber);
+        }
+
+        public async Task<List<Order>> GetUserOrdersAsync(string userId)
+        {
+            return await _context.Orders
+                .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Product)
+                .Where(o => o.UserId == userId)
+                .OrderByDescending(o => o.OrderDate)
+                .ToListAsync();
+        }
+
+        public async Task<Order?> GetOrderByIdAsync(int orderId)
+        {
+            return await _context.Orders
+                .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Product)
+                .Include(o => o.User)
+                .FirstOrDefaultAsync(o => o.Id == orderId);
         }
     }
 }
